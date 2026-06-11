@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(Get-ChildItem -Recurse \"c:\\\\Users\\\\andre\\\\OneDrive\\\\Documentos\\\\Ciclo08\\\\Robotica\\\\Reto02\")",
+      "Bash(Select-Object FullName)",
+      "Bash(find \"/mnt/c/Users/andre/OneDrive/Documentos/Ciclo08/Robotica/Reto02\" -type f 2>/dev/null || ls -la)",
+      "Read(//mnt/c/Users/andre/OneDrive/Documentos/Ciclo08/Robotica/**)"
+    ]
+  }
+}

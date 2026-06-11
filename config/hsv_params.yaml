@@ -1,14 +1,37 @@
 lane_detector:
   ros__parameters:
-    image_topic: "/image_raw"
 
-    lane_width_m: 0.30
+    # ---------------------------------------------------------------
+    # Blanco - borde DERECHO del carril (línea blanca)
+    # Fondo negro mate: S bajo, V alto.
+    # Recalibrar con scripts/hsv_tuner.py al inicio de cada sesión.
+    # ---------------------------------------------------------------
+    white_h_min: 0
+    white_h_max: 180
+    white_s_min: 0
+    white_s_max: 40
+    white_v_min: 170
+    white_v_max: 255
+
+    # ---------------------------------------------------------------
+    # Amarillo - borde IZQUIERDO del carril (línea amarilla)
+    # H ≈ 15-40 en OpenCV (0-180). Ampliar si la iluminación varía.
+    # ---------------------------------------------------------------
+    yellow_h_min: 15
+    yellow_h_max: 40
+    yellow_s_min: 80
+    yellow_s_max: 255
+    yellow_v_min: 80
+    yellow_v_max: 255
+
+    # ---------------------------------------------------------------
+    # Geometría / IPM
+    # lane_width_m: ancho real del carril en metros (medir en el lab)
+    # px_per_meter: escala de la vista IPM — calibrar con objeto conocido
+    # look_ahead_row: fila de muestreo en imagen IPM (0=arriba, 1=abajo)
+    # ---------------------------------------------------------------
+    min_area: 150
+    lane_width_m: 0.21
     px_per_meter: 600.0
-    roi_y_start_ratio: 0.55
-    min_area: 250.0
-
-    white_low: [0, 0, 160]
-    white_high: [180, 80, 255]
-
-    yellow_low: [15, 70, 70]
-    yellow_high: [40, 255, 255]
+    look_ahead_row: 0.6
+    publish_debug: true

@@ -1,11 +1,20 @@
 #!/usr/bin/env python3
+"""CapyTown lane_detector - Semana 11 (RC-2).
+
+Segmenta el borde blanco (derecha) y el eje amarillo (izquierda) por HSV,
+aplica una vista de pájaro (IPM) y publica el error lateral en metros
+sobre /lane_error.
+
+Convención de signo:
+  error > 0  →  centro del carril a la DERECHA del robot  →  girar derecha (ω < 0)
+  error < 0  →  centro del carril a la IZQUIERDA del robot →  girar izquierda (ω > 0)
+"""
 
 import cv2
 import numpy as np
 
 import rclpy
 from rclpy.node import Node
-
 from sensor_msgs.msg import Image
 from std_msgs.msg import Float32
 from cv_bridge import CvBridge
@@ -14,137 +23,181 @@ from cv_bridge import CvBridge
 class LaneDetector(Node):
     def __init__(self):
         super().__init__('lane_detector')
-
-        self.declare_parameter('image_topic', '/image_raw')
-        self.declare_parameter('lane_width_m', 0.30)
-        self.declare_parameter('px_per_meter', 600.0)
-        self.declare_parameter('roi_y_start_ratio', 0.55)
-        self.declare_parameter('min_area', 250.0)
-
-        self.declare_parameter('white_low', [0, 0, 160])
-        self.declare_parameter('white_high', [180, 80, 255])
-        self.declare_parameter('yellow_low', [15, 70, 70])
-        self.declare_parameter('yellow_high', [40, 255, 255])
-
-        image_topic = self.get_parameter('image_topic').value
-
         self.bridge = CvBridge()
-        self.pub_error = self.create_publisher(Float32, '/lane_error', 10)
-        self.pub_debug = self.create_publisher(Image, '/lane/debug_image', 10)
 
-        self.sub = self.create_subscription(Image, image_topic, self.image_callback, 10)
+        self.declare_parameters('', [
+            ('white_h_min',  0),
+            ('white_h_max',  180),
+            ('white_s_min',  0),
+            ('white_s_max',  30),
+            ('white_v_min',  180),
+            ('white_v_max',  255),
+            ('yellow_h_min', 15),
+            ('yellow_h_max', 40),
+            ('yellow_s_min', 80),
+            ('yellow_s_max', 255),
+            ('yellow_v_min', 80),
+            ('yellow_v_max', 255),
+            ('min_area',        150),
+            ('lane_width_m',    0.21),
+            ('px_per_meter',    600.0),
+            ('look_ahead_row',  0.6),
+            ('publish_debug',   True),
+        ])
 
-        self.get_logger().info(f'LaneDetector escuchando: {image_topic}')
-        self.get_logger().info('Publicando: /lane_error y /lane/debug_image')
+        gp = self.get_parameter
+        self.white_lo = np.array([gp('white_h_min').value,
+                                   gp('white_s_min').value,
+                                   gp('white_v_min').value], dtype=np.uint8)
+        self.white_hi = np.array([gp('white_h_max').value,
+                                   gp('white_s_max').value,
+                                   gp('white_v_max').value], dtype=np.uint8)
+        self.yellow_lo = np.array([gp('yellow_h_min').value,
+                                    gp('yellow_s_min').value,
+                                    gp('yellow_v_min').value], dtype=np.uint8)
+        self.yellow_hi = np.array([gp('yellow_h_max').value,
+                                    gp('yellow_s_max').value,
+                                    gp('yellow_v_max').value], dtype=np.uint8)
 
-    def largest_contour_x(self, mask):
-        min_area = float(self.get_parameter('min_area').value)
+        self.min_area       = float(gp('min_area').value)
+        self.lane_width_m   = float(gp('lane_width_m').value)
+        self.px_per_meter   = float(gp('px_per_meter').value)
+        self.look_ahead_row = float(gp('look_ahead_row').value)
+        self.publish_debug  = bool(gp('publish_debug').value)
 
-        contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        if not contours:
-            return None, None
+        self.M         = None
+        self.warp_size = None
 
-        c = max(contours, key=cv2.contourArea)
-        area = cv2.contourArea(c)
+        self.sub     = self.create_subscription(
+            Image, '/camera/image_raw', self.on_image, 10)
+        self.pub_err = self.create_publisher(Float32, '/lane_error', 10)
+        self.pub_dbg = self.create_publisher(Image, '/lane/debug_image', 10)
 
-        if area < min_area:
-            return None, None
+        self.get_logger().info('lane_detector listo.')
+        self.get_logger().info(
+            f'white HSV [{self.white_lo}] - [{self.white_hi}]  '
+            f'yellow HSV [{self.yellow_lo}] - [{self.yellow_hi}]')
 
-        M = cv2.moments(c)
-        if M['m00'] == 0:
-            return None, None
+    # ------------------------------------------------------------------
+    # IPM: transforma imagen de cámara a vista de pájaro (bird's-eye)
+    # ------------------------------------------------------------------
+    def build_ipm(self, w, h):
+        """Calcula la homografía para la vista de pájaro.
 
-        cx = int(M['m10'] / M['m00'])
-        return cx, c
+        Los puntos src definen el trapecio del suelo visible en la imagen
+        original. Ajustar si la cámara cambia de ángulo o altura.
+        """
+        src = np.float32([
+            [0.18 * w, 0.62 * h],   # arriba-izquierda
+            [0.82 * w, 0.62 * h],   # arriba-derecha
+            [1.00 * w, 0.98 * h],   # abajo-derecha
+            [0.00 * w, 0.98 * h],   # abajo-izquierda
+        ])
+        dst = np.float32([
+            [0.30 * w, 0.0],
+            [0.70 * w, 0.0],
+            [0.70 * w,  h],
+            [0.30 * w,  h],
+        ])
+        self.M         = cv2.getPerspectiveTransform(src, dst)
+        self.warp_size = (w, h)
 
-    def image_callback(self, msg):
+    # ------------------------------------------------------------------
+    # Callback principal
+    # ------------------------------------------------------------------
+    def on_image(self, msg):
         try:
-            frame = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
+            frame = self.bridge.imgmsg_to_cv2(msg, 'bgr8')
         except Exception as e:
-            self.get_logger().error(f'Error convirtiendo imagen: {e}')
+            self.get_logger().error(f'cv_bridge: {e}')
             return
 
         h, w = frame.shape[:2]
 
-        roi_ratio = float(self.get_parameter('roi_y_start_ratio').value)
-        y0 = int(h * roi_ratio)
-        roi = frame[y0:h, 0:w]
+        if self.M is None:
+            self.build_ipm(w, h)
 
-        hsv = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
+        # 1) Vista de pájaro (IPM)
+        warp = cv2.warpPerspective(frame, self.M, self.warp_size)
+        hsv  = cv2.cvtColor(warp, cv2.COLOR_BGR2HSV)
 
-        white_low = np.array(self.get_parameter('white_low').value, dtype=np.uint8)
-        white_high = np.array(self.get_parameter('white_high').value, dtype=np.uint8)
-        yellow_low = np.array(self.get_parameter('yellow_low').value, dtype=np.uint8)
-        yellow_high = np.array(self.get_parameter('yellow_high').value, dtype=np.uint8)
+        # 2) Máscaras de color
+        mask_white  = cv2.inRange(hsv, self.white_lo,  self.white_hi)
+        mask_yellow = cv2.inRange(hsv, self.yellow_lo, self.yellow_hi)
 
-        mask_white = cv2.inRange(hsv, white_low, white_high)
-        mask_yellow = cv2.inRange(hsv, yellow_low, yellow_high)
-
-        kernel = np.ones((5, 5), np.uint8)
-        mask_white = cv2.morphologyEx(mask_white, cv2.MORPH_OPEN, kernel)
-        mask_white = cv2.morphologyEx(mask_white, cv2.MORPH_CLOSE, kernel)
+        kernel = np.ones((3, 3), np.uint8)
+        mask_white  = cv2.morphologyEx(mask_white,  cv2.MORPH_OPEN, kernel)
+        mask_white  = cv2.morphologyEx(mask_white,  cv2.MORPH_CLOSE, kernel)
         mask_yellow = cv2.morphologyEx(mask_yellow, cv2.MORPH_OPEN, kernel)
         mask_yellow = cv2.morphologyEx(mask_yellow, cv2.MORPH_CLOSE, kernel)
 
-        x_white, c_white = self.largest_contour_x(mask_white)
-        x_yellow, c_yellow = self.largest_contour_x(mask_yellow)
+        # 3) Fila de muestreo (look-ahead): banda horizontal de ±8 px
+        row  = int(self.look_ahead_row * h)
+        band = slice(max(0, row - 8), min(h, row + 8))
+        x_white  = self._centroid_x(mask_white[band, :])
+        x_yellow = self._centroid_x(mask_yellow[band, :])
 
-        lane_width_m = float(self.get_parameter('lane_width_m').value)
-        px_per_meter = float(self.get_parameter('px_per_meter').value)
-        lane_width_px = lane_width_m * px_per_meter
-
-        center_px = None
+        # 4) Centro del carril (px) → error lateral (m)
+        #
+        # Carril interno: amarillo a la IZQUIERDA, blanco a la DERECHA.
+        # Si solo se ve una línea, se estima la otra usando lane_width_px.
+        # error_m > 0  →  centro del carril a la derecha del robot.
+        lane_width_px = self.lane_width_m * self.px_per_meter
 
         if x_white is not None and x_yellow is not None:
             center_px = (x_white + x_yellow) / 2.0
         elif x_white is not None:
+            # Solo línea blanca (derecha): estima amarilla a lane_width_px a su izquierda
             center_px = x_white - lane_width_px / 2.0
         elif x_yellow is not None:
+            # Solo línea amarilla (izquierda): estima blanca a lane_width_px a su derecha
             center_px = x_yellow + lane_width_px / 2.0
-
-        if center_px is None:
-            error_m = float('nan')
         else:
-            error_m = (center_px - (w / 2.0)) / px_per_meter
-
-        error_msg = Float32()
-        error_msg.data = float(error_m)
-        self.pub_error.publish(error_msg)
-
-        debug = frame.copy()
-        cv2.line(debug, (0, y0), (w, y0), (255, 0, 255), 2)
-        cv2.line(debug, (w // 2, y0), (w // 2, h), (255, 0, 0), 2)
-        cv2.putText(debug, 'CAM CENTER', (w // 2 - 80, max(20, y0 - 10)),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 2)
-
-        if c_white is not None:
-            c_white_draw = c_white + np.array([[[0, y0]]])
-            cv2.drawContours(debug, [c_white_draw], -1, (255, 255, 255), 2)
-            cv2.circle(debug, (int(x_white), y0 + roi.shape[0] // 2), 6, (255, 255, 255), -1)
-            cv2.putText(debug, 'WHITE', (int(x_white), y0 + 30),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255,255,255), 2)
-
-        if c_yellow is not None:
-            c_yellow_draw = c_yellow + np.array([[[0, y0]]])
-            cv2.drawContours(debug, [c_yellow_draw], -1, (0, 255, 255), 2)
-            cv2.circle(debug, (int(x_yellow), y0 + roi.shape[0] // 2), 6, (0, 255, 255), -1)
-            cv2.putText(debug, 'YELLOW', (int(x_yellow), y0 + 60),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0,255,255), 2)
+            center_px = None
 
         if center_px is not None:
-            cv2.line(debug, (int(center_px), y0), (int(center_px), h), (0, 255, 0), 2)
-            cv2.putText(debug, f'error_m={error_m:.3f}', (20, 40),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0,255,0), 2)
+            error_m = (center_px - w / 2.0) / self.px_per_meter
         else:
-            cv2.putText(debug, 'NO LANE DETECTED', (20, 40),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0,0,255), 2)
+            error_m = float('nan')
 
-        try:
-            debug_msg = self.bridge.cv2_to_imgmsg(debug, encoding='bgr8')
-            debug_msg.header = msg.header
-            self.pub_debug.publish(debug_msg)
-        except Exception as e:
-            self.get_logger().error(f'Error publicando debug: {e}')
+        out      = Float32()
+        out.data = float(error_m)
+        self.pub_err.publish(out)
+
+        if self.publish_debug:
+            self._publish_debug(warp, row, x_white, x_yellow, center_px, msg)
+
+    # ------------------------------------------------------------------
+    # Helpers
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _centroid_x(mask):
+        """Centroide horizontal de la máscara (None si muy pequeño)."""
+        m = cv2.moments(mask, binaryImage=True)
+        if m['m00'] < 1e-3:
+            return None
+        return m['m10'] / m['m00']
+
+    def _publish_debug(self, warp, row, xw, xy, xc, header_msg):
+        dbg = warp.copy()
+        # Línea de look-ahead
+        cv2.line(dbg, (0, row), (dbg.shape[1], row), (0, 255, 0), 1)
+        # Puntos detectados: blanco=blanco, amarillo=cyan, centro=rojo
+        for x, color, label in (
+            (xw, (255, 255, 255), 'W'),
+            (xy, (0, 255, 255),   'Y'),
+            (xc, (0, 0, 255),     'C'),
+        ):
+            if x is not None:
+                cv2.circle(dbg, (int(x), row), 6, color, -1)
+                cv2.putText(dbg, label, (int(x) + 8, row - 4),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
+        # Línea vertical del centro de imagen
+        cv2.line(dbg, (dbg.shape[1] // 2, 0),
+                 (dbg.shape[1] // 2, dbg.shape[0]), (128, 128, 128), 1)
+        out        = self.bridge.cv2_to_imgmsg(dbg, 'bgr8')
+        out.header = header_msg.header
+        self.pub_dbg.publish(out)
 
 
 def main(args=None):
@@ -154,8 +207,9 @@ def main(args=None):
         rclpy.spin(node)
     except KeyboardInterrupt:
         pass
-    node.destroy_node()
-    rclpy.shutdown()
+    finally:
+        node.destroy_node()
+        rclpy.shutdown()
 
 
 if __name__ == '__main__':

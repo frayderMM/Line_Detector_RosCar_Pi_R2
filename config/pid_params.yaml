@@ -1,15 +1,15 @@
 lane_controller:
   ros__parameters:
-    kp: 1.2
-    ki: 0.0
-    kd: 0.15
 
-    # Por seguridad inicia detenido. Cuando /lane_error esté bien, cambia a 0.08, luego 0.12, luego 0.20.
-    linear_speed: 0.0
-    max_angular: 1.0
+    # PID — sintonizar en este orden: primero kp, luego kd, al final ki
+    kp: 2.5          # proporcional (oscila si es muy alto)
+    ki: 0.0          # integral (útil solo si hay sesgo persistente en curvas)
+    kd: 0.3          # derivativo (amortigua oscilaciones)
 
-    integral_limit: 0.4
-    error_timeout: 0.5
-    control_rate: 20.0
+    # Velocidad de crucero — subir progresivamente: 0.10 → 0.15 → 0.20
+    linear_speed: 0.20   # m/s  (mínimo aceptable para el reto: 0.15)
 
-    turn_right_negative: true
+    max_angular: 2.0     # rad/s — saturación de omega
+    integral_limit: 0.5  # anti-windup: límite acumulador integral
+    error_timeout: 0.5   # s — sin /lane_error → frena por seguridad
+    control_rate: 30.0   # Hz del lazo de control
