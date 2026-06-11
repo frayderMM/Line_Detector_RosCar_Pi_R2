@@ -84,20 +84,25 @@ class LaneDetector(Node):
     def build_ipm(self, w, h):
         """Calcula la homografía para la vista de pájaro.
 
-        Los puntos src definen el trapecio del suelo visible en la imagen
-        original. Ajustar si la cámara cambia de ángulo o altura.
+        Cámara mirando hacia adelante y ligeramente hacia abajo.
+        El trapecio src captura el suelo visible desde ~55% de la imagen.
+
+        Para ajustar en el lab:
+          - Si las líneas se ven muy lejos: subir 0.55 → 0.50
+          - Si las líneas se cortan abajo: bajar 0.97 → 0.99
+          - Si el trapecio es muy estrecho: ampliar 0.20/0.80 → 0.10/0.90
         """
         src = np.float32([
-            [0.18 * w, 0.62 * h],   # arriba-izquierda
-            [0.82 * w, 0.62 * h],   # arriba-derecha
-            [1.00 * w, 0.98 * h],   # abajo-derecha
-            [0.00 * w, 0.98 * h],   # abajo-izquierda
+            [0.20 * w, 0.55 * h],   # arriba-izquierda  (horizonte del suelo)
+            [0.80 * w, 0.55 * h],   # arriba-derecha
+            [1.00 * w, 0.97 * h],   # abajo-derecha     (frente del robot)
+            [0.00 * w, 0.97 * h],   # abajo-izquierda
         ])
         dst = np.float32([
-            [0.30 * w, 0.0],
-            [0.70 * w, 0.0],
-            [0.70 * w,  h],
-            [0.30 * w,  h],
+            [0.25 * w, 0.0],
+            [0.75 * w, 0.0],
+            [0.75 * w,  h],
+            [0.25 * w,  h],
         ])
         self.M         = cv2.getPerspectiveTransform(src, dst)
         self.warp_size = (w, h)
