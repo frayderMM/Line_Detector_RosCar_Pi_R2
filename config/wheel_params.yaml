@@ -1,0 +1,7 @@
+# Parametros cinematicos del Yahboom MicroROS-Pi5
+# RC-1 - La Manzana del Tambo
+# Actualizar 'wheel_separation' con el valor de b_eff tras calibrar
+
+wheel_radius: 0.035          # [m] radio de la rueda
+wheel_separation: 0.24       # [m] b_eff (track efectivo) - valor inicial ~ ancho x 1.4
+encoder_ticks_per_rev: 1024  # ticks por revolucion del encoder

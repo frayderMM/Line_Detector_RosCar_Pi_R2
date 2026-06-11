@@ -1,0 +1,15 @@
+lane_controller:
+  ros__parameters:
+    kp: 1.2
+    ki: 0.0
+    kd: 0.15
+
+    # Por seguridad inicia detenido. Cuando /lane_error esté bien, cambia a 0.08, luego 0.12, luego 0.20.
+    linear_speed: 0.0
+    max_angular: 1.0
+
+    integral_limit: 0.4
+    error_timeout: 0.5
+    control_rate: 20.0
+
+    turn_right_negative: true

@@ -1,0 +1,14 @@
+lane_detector:
+  ros__parameters:
+    image_topic: "/image_raw"
+
+    lane_width_m: 0.30
+    px_per_meter: 600.0
+    roi_y_start_ratio: 0.55
+    min_area: 250.0
+
+    white_low: [0, 0, 160]
+    white_high: [180, 80, 255]
+
+    yellow_low: [15, 70, 70]
+    yellow_high: [40, 255, 255]
