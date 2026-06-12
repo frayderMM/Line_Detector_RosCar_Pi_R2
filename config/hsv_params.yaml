@@ -17,11 +17,11 @@ lane_detector:
     # Amarillo - borde IZQUIERDO del carril (línea amarilla)
     # H ≈ 15-40 en OpenCV (0-180). Ampliar si la iluminación varía.
     # ---------------------------------------------------------------
-    yellow_h_min: 18
-    yellow_h_max: 35
-    yellow_s_min: 120
+    yellow_h_min: 15
+    yellow_h_max: 40
+    yellow_s_min: 60
     yellow_s_max: 255
-    yellow_v_min: 100
+    yellow_v_min: 80
     yellow_v_max: 255
 
     # ---------------------------------------------------------------
