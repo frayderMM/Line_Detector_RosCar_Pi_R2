@@ -7,7 +7,7 @@ lane_controller:
     kd: 0.3          # derivativo (amortigua oscilaciones)
 
     # Velocidad de crucero — subir progresivamente: 0.10 → 0.15 → 0.20
-    linear_speed: 0.20   # m/s  (mínimo aceptable para el reto: 0.15)
+    linear_speed: 0.14   # m/s  (reducido 30% para calibración)
 
     max_angular: 2.0     # rad/s — saturación de omega
     integral_limit: 0.5  # anti-windup: límite acumulador integral

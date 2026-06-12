@@ -173,7 +173,7 @@ class LaneDetector(Node):
         self.pub_err.publish(out)
 
         if self.publish_debug:
-            self._publish_debug(warp, row, x_white, x_yellow, center_px, msg)
+            self._publish_debug(warp, mask_white, mask_yellow, row, x_white, x_yellow, center_px, msg)
 
     # ------------------------------------------------------------------
     # Helpers
@@ -186,11 +186,18 @@ class LaneDetector(Node):
             return None
         return m['m10'] / m['m00']
 
-    def _publish_debug(self, warp, row, xw, xy, xc, header_msg):
-        dbg = warp.copy()
+    def _publish_debug(self, warp, mask_white, mask_yellow, row, xw, xy, xc, header_msg):
+        h, w = warp.shape[:2]
+        dbg = np.zeros((h, w, 3), dtype=np.uint8)
+
+        # Colorear píxeles detectados: blanco y amarillo sobre negro
+        dbg[mask_white  > 0] = (255, 255, 255)
+        dbg[mask_yellow > 0] = (0, 255, 255)
+
         # Línea de look-ahead
-        cv2.line(dbg, (0, row), (dbg.shape[1], row), (0, 255, 0), 1)
-        # Puntos detectados: blanco=blanco, amarillo=cyan, centro=rojo
+        cv2.line(dbg, (0, row), (w, row), (0, 255, 0), 1)
+
+        # Puntos de centroide y centro
         for x, color, label in (
             (xw, (255, 255, 255), 'W'),
             (xy, (0, 255, 255),   'Y'),
@@ -200,9 +207,10 @@ class LaneDetector(Node):
                 cv2.circle(dbg, (int(x), row), 6, color, -1)
                 cv2.putText(dbg, label, (int(x) + 8, row - 4),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
-        # Línea vertical del centro de imagen
-        cv2.line(dbg, (dbg.shape[1] // 2, 0),
-                 (dbg.shape[1] // 2, dbg.shape[0]), (128, 128, 128), 1)
+
+        # Centro de imagen
+        cv2.line(dbg, (w // 2, 0), (w // 2, h), (128, 128, 128), 1)
+
         out        = self.bridge.cv2_to_imgmsg(dbg, 'bgr8')
         out.header = header_msg.header
         self.pub_dbg.publish(out)
