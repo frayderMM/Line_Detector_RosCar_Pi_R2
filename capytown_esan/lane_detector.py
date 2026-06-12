@@ -148,7 +148,7 @@ class LaneDetector(Node):
         lane_width_px = self.lane_width_m * self.px_per_meter
 
         if x_yellow is not None:
-            center_px = x_yellow + lane_width_px / 2.0
+            center_px = x_yellow
             error_m   = (center_px - w / 2.0) / self.px_per_meter
         else:
             center_px = None
