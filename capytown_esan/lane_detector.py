@@ -117,9 +117,6 @@ class LaneDetector(Node):
             self.get_logger().error(f'cv_bridge: {e}')
             return
 
-        # Rotar imagen 90° horario para corregir cámara girada
-        frame = cv2.rotate(frame, cv2.ROTATE_90_CLOCKWISE)
-
         h, w = frame.shape[:2]
 
         if self.M is None:
@@ -179,8 +176,7 @@ class LaneDetector(Node):
         h, w = warp.shape[:2]
         dbg = np.zeros((h, w, 3), dtype=np.uint8)
 
-        # Colorear píxeles detectados: blanco y amarillo sobre negro
-        dbg[mask_white  > 0] = (255, 255, 255)
+        # Solo mostrar línea amarilla detectada (cyan sobre negro)
         dbg[mask_yellow > 0] = (0, 255, 255)
 
         # Línea de look-ahead
