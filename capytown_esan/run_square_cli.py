@@ -24,7 +24,7 @@ VEL_LINEAL = 0.15
 VEL_ANGULAR = 0.6
 TIMES_AVANZAR = int(LADO / VEL_LINEAL * 10)  # 120
 TIMES_GIRAR = int(3.14159 / 2 / VEL_ANGULAR * 10)  # 26
-# =========================
+# ========
 
 
 def run_cmd(cmd):
