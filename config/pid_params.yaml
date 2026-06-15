@@ -17,4 +17,4 @@ lane_controller:
     recovery_w: 1.05     # rad/s = 60 deg/s girando al buscar la línea perdida
     recovery_v: 0.05     # m/s avance lento mientras busca la línea
     history_size: 10     # muestras para calcular tendencia de giro (~0.33s)
-    turn_threshold: 0.3  # |ω| rad/s mínimo para activar feed-forward predictivo
+    turn_threshold: 0.3   # |ω| rad/s mínimo para activar FF (giro diferencial real)

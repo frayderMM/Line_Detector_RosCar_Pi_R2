@@ -39,7 +39,7 @@ class LaneController(Node):
             ('recovery_w',     0.6),
             ('recovery_v',     0.0),
             ('history_size',   10),    # muestras para calcular tendencia (~0.33 s a 30 Hz)
-            ('turn_threshold', 0.3),   # |ω| mínimo para considerar que hay giro real
+            ('turn_threshold',  0.3),   # |ω| mínimo para considerar giro diferencial real
         ])
 
         gp               = self.get_parameter
@@ -131,13 +131,10 @@ class LaneController(Node):
         derivative = (e - self.last_error) / dt
         D = self.kd * derivative
 
-        # FF: solo anticipa si el robot YA está girando (giro real, no offset recto)
-        # Si va recto con la línea a un lado, el PID corrige sin FF
+        # FF: solo cuando ambos lados giran diferente (|ω| significativo = giro diferencial)
+        # Recto (ω ≈ 0) → no FF aunque haya offset de posición
         trend = self._trend()
-        if abs(self.last_w) > self.turn_threshold:
-            FF = self.kff * trend
-        else:
-            FF = 0.0
+        FF = self.kff * trend if abs(self.last_w) > self.turn_threshold else 0.0
 
         # ω total: negado porque error>0 → girar derecha → ω<0
         w = -(P + I + D + FF)
