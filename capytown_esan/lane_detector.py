@@ -133,6 +133,9 @@ class LaneDetector(Node):
         mask_white_raw = cv2.morphologyEx(mask_white_raw, cv2.MORPH_OPEN,  kernel)
         mask_white_raw = cv2.morphologyEx(mask_white_raw, cv2.MORPH_CLOSE, kernel)
 
+        # Excluir píxeles amarillos del blanco (evita contaminación cruzada)
+        mask_white_raw = cv2.bitwise_and(mask_white_raw, cv2.bitwise_not(mask_yellow))
+
         # Filtrar blanco: solo líneas consecutivas (alto/estrecho), no manchas grandes
         mask_white = self._filter_line_shape(mask_white_raw)
 
@@ -189,8 +192,8 @@ class LaneDetector(Node):
         h, w = warp.shape[:2]
         dbg = np.zeros((h, w, 3), dtype=np.uint8)
 
-        dbg[mask_yellow > 0] = (0, 255, 255)   # amarillo → cyan
         dbg[mask_white  > 0] = (255, 255, 255) # blanco   → blanco
+        dbg[mask_yellow > 0] = (0, 255, 255)   # amarillo → cyan (encima del blanco)
 
         cv2.line(dbg, (0, row), (w, row), (0, 255, 0), 1)
         cv2.line(dbg, (w // 2, 0), (w // 2, h), (128, 128, 128), 1)
