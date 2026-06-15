@@ -6,6 +6,8 @@ Controlador PID sobre /lane_error que publica /cmd_vel.
 Convención de signo (igual que lane_detector):
   error > 0  →  centro del carril a la DERECHA  →  ω < 0 (girar derecha)
   error < 0  →  centro del carril a la IZQUIERDA →  ω > 0 (girar izquierda)
+
+Modo recuperación: si se pierde la línea, rota hacia el último lado conocido.
 """
 
 import math
@@ -29,17 +31,21 @@ class LaneController(Node):
             ('integral_limit', 0.5),
             ('error_timeout',  0.5),
             ('control_rate',   30.0),
+            ('recovery_w',     0.6),   # rad/s al girar buscando la línea
+            ('recovery_v',     0.0),   # m/s avance durante recuperación
         ])
 
-        gp           = self.get_parameter
-        self.kp      = float(gp('kp').value)
-        self.ki      = float(gp('ki').value)
-        self.kd      = float(gp('kd').value)
-        self.v       = float(gp('linear_speed').value)
-        self.max_w   = float(gp('max_angular').value)
-        self.i_limit = float(gp('integral_limit').value)
-        self.timeout = float(gp('error_timeout').value)
-        rate         = float(gp('control_rate').value)
+        gp             = self.get_parameter
+        self.kp        = float(gp('kp').value)
+        self.ki        = float(gp('ki').value)
+        self.kd        = float(gp('kd').value)
+        self.v         = float(gp('linear_speed').value)
+        self.max_w     = float(gp('max_angular').value)
+        self.i_limit   = float(gp('integral_limit').value)
+        self.timeout   = float(gp('error_timeout').value)
+        self.recovery_w = float(gp('recovery_w').value)
+        self.recovery_v = float(gp('recovery_v').value)
+        rate           = float(gp('control_rate').value)
 
         self.error      = None
         self.last_error = 0.0
@@ -55,7 +61,8 @@ class LaneController(Node):
         self.get_logger().info('lane_controller listo.')
         self.get_logger().info(
             f'PID kp={self.kp} ki={self.ki} kd={self.kd}  '
-            f'v={self.v} m/s  max_w={self.max_w} rad/s')
+            f'v={self.v} m/s  max_w={self.max_w} rad/s  '
+            f'recovery_w={self.recovery_w} rad/s')
 
     def on_error(self, msg):
         if not math.isnan(msg.data):
@@ -70,11 +77,22 @@ class LaneController(Node):
         if dt <= 0.0:
             return
 
-        # Seguridad: sin /lane_error reciente → frenar y resetear integral
         age = (now - self.last_rx).nanoseconds * 1e-9
+
+        # Línea perdida → modo recuperación: girar hacia el último lado conocido
         if self.error is None or age > self.timeout:
-            self.pub.publish(Twist())
             self.integral = 0.0
+            if self.last_error != 0.0:
+                # -sign(last_error) porque error>0 → línea a la derecha → girar derecha → ω<0
+                direction = -math.copysign(1.0, self.last_error)
+                cmd = Twist()
+                cmd.linear.x  = self.recovery_v
+                cmd.angular.z = direction * self.recovery_w
+                self.pub.publish(cmd)
+                self.get_logger().info(
+                    f'[RECOVERY] línea perdida, girando {"derecha" if direction < 0 else "izquierda"}')
+            else:
+                self.pub.publish(Twist())
             return
 
         e = self.error
@@ -82,7 +100,7 @@ class LaneController(Node):
         # P
         P = self.kp * e
 
-        # I con anti-windup (clamp antes de acumular)
+        # I con anti-windup
         self.integral += e * dt
         self.integral  = max(-self.i_limit, min(self.i_limit, self.integral))
         I = self.ki * self.integral
@@ -91,7 +109,7 @@ class LaneController(Node):
         derivative = (e - self.last_error) / dt
         D = self.kd * derivative
 
-        # Velocidad angular: negamos la suma porque error>0 → girar derecha → ω<0
+        # ω negado: error>0 → girar derecha → ω<0
         w = -(P + I + D)
         w = max(-self.max_w, min(self.max_w, w))
 
