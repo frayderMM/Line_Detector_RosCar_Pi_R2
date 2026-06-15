@@ -2,9 +2,9 @@ lane_controller:
   ros__parameters:
 
     # PID — sintonizar en este orden: primero kp, luego kd, al final ki
-    kp: 2.5          # proporcional (oscila si es muy alto)
-    ki: 0.0          # integral (útil solo si hay sesgo persistente en curvas)
-    kd: 0.3          # derivativo (amortigua oscilaciones)
+    kp: 4.0          # proporcional (oscila si es muy alto)
+    ki: 0.3          # integral (corrige sesgo persistente)
+    kd: 0.4          # derivativo (amortigua oscilaciones)
 
     # Velocidad de crucero — subir progresivamente: 0.10 → 0.15 → 0.20
     linear_speed: 0.14   # m/s  (reducido 30% para calibración)
@@ -13,5 +13,5 @@ lane_controller:
     integral_limit: 0.5  # anti-windup: límite acumulador integral
     error_timeout: 0.5   # s — sin /lane_error → modo recuperación
     control_rate: 30.0   # Hz del lazo de control
-    recovery_w: 0.6      # rad/s girando al buscar la línea perdida
+    recovery_w: 0.9      # rad/s girando al buscar la línea perdida
     recovery_v: 0.0      # m/s avance durante recuperación (0 = solo gira)
