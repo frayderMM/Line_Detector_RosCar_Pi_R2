@@ -6,13 +6,13 @@ lane_detector:
     # L = luminosidad (0-255), A y B son canales de color (128 = neutro)
     # Blanco: L alto, A y B cerca de 128
     # ---------------------------------------------------------------
-    white_l_min: 130
+    white_l_min: 95
     white_l_max: 255
-    white_a_min: 100
-    white_a_max: 155
-    white_b_min: 100
-    white_b_max: 155
-    white_min_aspect: 1.8   # altura/ancho mínimo — filtra líneas consecutivas vs manchas
+    white_a_min: 90
+    white_a_max: 165
+    white_b_min: 90
+    white_b_max: 165
+    white_min_aspect: 1.2   # altura/ancho mínimo — filtra líneas consecutivas vs manchas
     white_max_area: 8000    # rechaza manchas grandes (reflejos de suelo brillante)
 
     # ---------------------------------------------------------------
