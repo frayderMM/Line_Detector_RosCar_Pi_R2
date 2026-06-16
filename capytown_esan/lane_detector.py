@@ -131,17 +131,8 @@ class LaneDetector(Node):
         mask_white_raw = cv2.morphologyEx(mask_white_raw, cv2.MORPH_OPEN,  kernel)
         mask_white_raw = cv2.morphologyEx(mask_white_raw, cv2.MORPH_CLOSE, kernel)
 
-        # ── Separación por mitad: amarillo izquierda, blanco derecha ──
-        half = w // 2
-        left_zone  = np.zeros((h, w), dtype=np.uint8)
-        right_zone = np.zeros((h, w), dtype=np.uint8)
-        left_zone[:, :half]  = 255
-        right_zone[:, half:] = 255
-
-        mask_yellow    = cv2.bitwise_and(mask_yellow,    left_zone)
-        mask_white_raw = cv2.bitwise_and(mask_white_raw, right_zone)
-
-        # Evitar que el amarillo contamine el blanco
+        # Evitar que el amarillo contamine el blanco (sin split duro por mitad)
+        # En curvas las líneas se desplazan y el split las enmascaraba incorrectamente
         mask_white_raw = cv2.bitwise_and(mask_white_raw,
                                           cv2.bitwise_not(mask_yellow))
 
@@ -214,10 +205,7 @@ class LaneDetector(Node):
 
         # Línea de look-ahead y centro de imagen
         cv2.line(dbg, (0, row), (w, row), (0, 255, 0), 1)
-        cv2.line(dbg, (w // 2, 0), (w // 2, h), (180, 180, 180), 1)
-
-        # División izquierda / derecha
-        cv2.line(dbg, (w // 2, 0), (w // 2, h), (100, 100, 100), 1)
+        cv2.line(dbg, (w // 2, 0), (w // 2, h), (80, 80, 80), 1)
 
         # Puntos de centroide
         for x, color, label in (
