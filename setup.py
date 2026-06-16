@@ -9,9 +9,10 @@ setup(
     version='1.0.0',
     packages=find_packages(exclude=['test']),
     data_files=[
+        ('share/ament_index/resource_index/packages', ['resource/' + package_name]),
+        ('share/' + package_name, ['package.xml']),
         (os.path.join('share', package_name, 'launch'), glob('launch/*.launch.py')),
         (os.path.join('share', package_name, 'config'), glob('config/*.yaml')),
-        (os.path.join('share', package_name, 'maps'), glob('maps/*')),
     ],
     install_requires=['setuptools'],
     zip_safe=True,
@@ -24,10 +25,6 @@ setup(
         'console_scripts': [
             'lane_detector = capytown_esan.lane_detector:main',
             'lane_controller = capytown_esan.lane_controller:main',
-            'teleop_key = capytown_esan.teleop_key:main',
-            'calibrate_beff = capytown_esan.calibrate_beff:main',
-            'error_odom = capytown_esan.error_odom:main',
-            'square = capytown_esan.move_square:main',
         ],
     },
 )
