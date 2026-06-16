@@ -12,7 +12,7 @@ lane_detector:
     white_a_max: 170
     white_b_min: 85
     white_b_max: 170
-    white_max_area: 6000    # rechaza reflejos grandes (baldosas, destellos)
+    white_max_area: 25000   # rechaza reflejos muy grandes (baldosas, destellos)
 
     # ---------------------------------------------------------------
     # Amarillo - HSV - línea IZQUIERDA del carril
