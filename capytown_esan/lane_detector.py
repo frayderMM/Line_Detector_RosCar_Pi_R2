@@ -131,8 +131,13 @@ class LaneDetector(Node):
         mask_white_raw = cv2.morphologyEx(mask_white_raw, cv2.MORPH_OPEN,  kernel)
         mask_white_raw = cv2.morphologyEx(mask_white_raw, cv2.MORPH_CLOSE, kernel)
 
-        # Evitar que el amarillo contamine el blanco (sin split duro por mitad)
-        # En curvas las líneas se desplazan y el split las enmascaraba incorrectamente
+        # Amarillo: sin restricción de zona — su hue es específico, funciona en curvas
+        # Blanco: restringido a mitad derecha — evita falsos positivos de reflejos
+        right_zone = np.zeros((h, w), dtype=np.uint8)
+        right_zone[:, w // 2:] = 255
+        mask_white_raw = cv2.bitwise_and(mask_white_raw, right_zone)
+
+        # Evitar que el amarillo contamine el blanco
         mask_white_raw = cv2.bitwise_and(mask_white_raw,
                                           cv2.bitwise_not(mask_yellow))
 

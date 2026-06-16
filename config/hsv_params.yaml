@@ -8,7 +8,7 @@ lane_detector:
     # ---------------------------------------------------------------
     white_s_min: 0
     white_s_max: 80     # sube si no detecta, baja si pica colores del piso
-    white_v_min: 100    # baja si no detecta, sube si pica el piso oscuro
+    white_v_min: 140    # baja si no detecta, sube si pica el piso oscuro
     white_v_max: 255
     white_max_area: 25000
 
