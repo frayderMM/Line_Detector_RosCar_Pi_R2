@@ -4,7 +4,7 @@ lane_detector:
     # ---------------------------------------------------------------
     # Blanco - LAB (más robusto que HSV para blancos con reflejos)
     # L = luminosidad (0-255), A y B son canales de color (128 = neutro)
-    # Blanco: L alto, A y B cerca de 128
+    # Blanco real: L alto, A y B cerca de 128
     # ---------------------------------------------------------------
     white_l_min: 80
     white_l_max: 255
@@ -12,12 +12,11 @@ lane_detector:
     white_a_max: 170
     white_b_min: 85
     white_b_max: 170
-    white_min_aspect: 1.5   # altura/ancho mínimo — solo líneas consecutivas, no manchas
-    white_max_area: 6000    # rechaza manchas grandes (reflejos, baldosas, etc)
+    white_max_area: 6000    # rechaza reflejos grandes (baldosas, destellos)
 
     # ---------------------------------------------------------------
-    # Amarillo - HSV - borde IZQUIERDO del carril
-    # ---------------------------------------------------
+    # Amarillo - HSV - línea IZQUIERDA del carril
+    # ---------------------------------------------------------------
     yellow_h_min: 15
     yellow_h_max: 40
     yellow_s_min: 60
@@ -32,4 +31,12 @@ lane_detector:
     lane_width_m: 0.22
     px_per_meter: 600.0
     look_ahead_row: 0.88
+    band_half_height: 30   # semialtura de la banda de centroide en píxeles
+
+    # ---------------------------------------------------------------
+    # Comportamiento
+    # require_both_lines: true  → solo publica error si VE AMBAS líneas
+    # require_both_lines: false → si pierde una, estima con la otra
+    # ---------------------------------------------------------------
+    require_both_lines: false
     publish_debug: true

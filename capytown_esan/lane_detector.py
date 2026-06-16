@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
 """CapyTown lane_detector - Semana 11 (RC-2).
 
-Amarillo (izquierda): HSV
-Blanco  (derecha):    LAB — más robusto ante reflejos que HSV
+Amarillo (izquierda): HSV  — línea interior del carril
+Blanco   (derecha):   LAB  — línea exterior del carril
 
-El robot va al CENTRO entre las dos líneas.
+El robot mantiene la línea amarilla a su izquierda y la blanca a su derecha,
+calculando el error como la distancia del centro entre ambas líneas al centro
+de la imagen.
 
 Convención de signo:
-  error > 0  →  centro a la DERECHA  →  girar derecha (ω < 0)
-  error < 0  →  centro a la IZQUIERDA →  girar izquierda (ω > 0)
+  error > 0  →  centro a la DERECHA del robot  →  girar derecha (ω < 0)
+  error < 0  →  centro a la IZQUIERDA del robot →  girar izquierda (ω > 0)
 """
 
 import cv2
@@ -27,15 +29,14 @@ class LaneDetector(Node):
         self.bridge = CvBridge()
 
         self.declare_parameters('', [
-            # Blanco - LAB
-            ('white_l_min',      130),
-            ('white_l_max',      255),
-            ('white_a_min',      100),
-            ('white_a_max',      155),
-            ('white_b_min',      100),
-            ('white_b_max',      155),
-            ('white_min_aspect', 1.8),   # altura/ancho mínimo para forma de línea
-            ('white_max_area',   8000),  # rechazar manchas grandes (reflejos)
+            # Blanco - LAB (L=luminosidad, A y B cerca de 128 = neutro/blanco)
+            ('white_l_min',        80),
+            ('white_l_max',        255),
+            ('white_a_min',        85),
+            ('white_a_max',        170),
+            ('white_b_min',        85),
+            ('white_b_max',        170),
+            ('white_max_area',     6000),  # rechaza reflejos grandes
             # Amarillo - HSV
             ('yellow_h_min', 15),
             ('yellow_h_max', 40),
@@ -44,23 +45,25 @@ class LaneDetector(Node):
             ('yellow_v_min', 80),
             ('yellow_v_max', 255),
             # Geometría
-            ('min_area',        150),
-            ('lane_width_m',    0.21),
-            ('px_per_meter',    600.0),
-            ('look_ahead_row',  0.88),
-            ('publish_debug',   True),
+            ('min_area',           150),
+            ('lane_width_m',       0.22),
+            ('px_per_meter',       600.0),
+            ('look_ahead_row',     0.88),
+            ('band_half_height',   30),    # semialtura de la banda de centroide en px
+            # Comportamiento
+            ('require_both_lines', False), # True = solo publica error si ambas líneas detectadas
+            ('publish_debug',      True),
         ])
 
         gp = self.get_parameter
 
-        self.white_lo_lab     = np.array([gp('white_l_min').value,
-                                           gp('white_a_min').value,
-                                           gp('white_b_min').value], dtype=np.uint8)
-        self.white_hi_lab     = np.array([gp('white_l_max').value,
-                                           gp('white_a_max').value,
-                                           gp('white_b_max').value], dtype=np.uint8)
-        self.white_min_aspect = float(gp('white_min_aspect').value)
-        self.white_max_area   = float(gp('white_max_area').value)
+        self.white_lo_lab = np.array([gp('white_l_min').value,
+                                       gp('white_a_min').value,
+                                       gp('white_b_min').value], dtype=np.uint8)
+        self.white_hi_lab = np.array([gp('white_l_max').value,
+                                       gp('white_a_max').value,
+                                       gp('white_b_max').value], dtype=np.uint8)
+        self.white_max_area = float(gp('white_max_area').value)
 
         self.yellow_lo = np.array([gp('yellow_h_min').value,
                                     gp('yellow_s_min').value,
@@ -73,6 +76,8 @@ class LaneDetector(Node):
         self.lane_width_m   = float(gp('lane_width_m').value)
         self.px_per_meter   = float(gp('px_per_meter').value)
         self.look_ahead_row = float(gp('look_ahead_row').value)
+        self.band_half_h    = int(gp('band_half_height').value)
+        self.require_both   = bool(gp('require_both_lines').value)
         self.publish_debug  = bool(gp('publish_debug').value)
 
         self.M         = None
@@ -119,58 +124,61 @@ class LaneDetector(Node):
 
         warp = cv2.warpPerspective(frame, self.M, self.warp_size)
 
-        # Amarillo: HSV
+        # ── Detección de colores ──────────────────────────────────────
         hsv         = cv2.cvtColor(warp, cv2.COLOR_BGR2HSV)
         mask_yellow = cv2.inRange(hsv, self.yellow_lo, self.yellow_hi)
 
-        # Blanco: LAB
-        lab             = cv2.cvtColor(warp, cv2.COLOR_BGR2LAB)
-        mask_white_raw  = cv2.inRange(lab, self.white_lo_lab, self.white_hi_lab)
+        lab            = cv2.cvtColor(warp, cv2.COLOR_BGR2LAB)
+        mask_white_raw = cv2.inRange(lab, self.white_lo_lab, self.white_hi_lab)
 
+        # Morfología para eliminar ruido
         kernel = np.ones((3, 3), np.uint8)
-        mask_yellow    = cv2.morphologyEx(mask_yellow,   cv2.MORPH_OPEN,  kernel)
-        mask_yellow    = cv2.morphologyEx(mask_yellow,   cv2.MORPH_CLOSE, kernel)
+        mask_yellow    = cv2.morphologyEx(mask_yellow,    cv2.MORPH_OPEN,  kernel)
+        mask_yellow    = cv2.morphologyEx(mask_yellow,    cv2.MORPH_CLOSE, kernel)
         mask_white_raw = cv2.morphologyEx(mask_white_raw, cv2.MORPH_OPEN,  kernel)
         mask_white_raw = cv2.morphologyEx(mask_white_raw, cv2.MORPH_CLOSE, kernel)
 
-        # Dividir imagen: izquierda solo amarillo, derecha solo blanco
+        # ── Separación por mitad: amarillo izquierda, blanco derecha ──
         half = w // 2
-        left_mask  = np.zeros((h, w), dtype=np.uint8)
-        left_mask[:, :half] = 255
-        right_mask = np.zeros((h, w), dtype=np.uint8)
-        right_mask[:, half:] = 255
+        left_zone  = np.zeros((h, w), dtype=np.uint8)
+        right_zone = np.zeros((h, w), dtype=np.uint8)
+        left_zone[:, :half]  = 255
+        right_zone[:, half:] = 255
 
-        mask_yellow    = cv2.bitwise_and(mask_yellow,    left_mask)
-        mask_white_raw = cv2.bitwise_and(mask_white_raw, right_mask)
+        mask_yellow    = cv2.bitwise_and(mask_yellow,    left_zone)
+        mask_white_raw = cv2.bitwise_and(mask_white_raw, right_zone)
 
-        # Excluir píxeles amarillos del blanco
-        mask_white_raw = cv2.bitwise_and(mask_white_raw, cv2.bitwise_not(mask_yellow))
+        # Evitar que el amarillo contamine el blanco
+        mask_white_raw = cv2.bitwise_and(mask_white_raw,
+                                          cv2.bitwise_not(mask_yellow))
 
-        # Filtrar blanco: solo líneas consecutivas, no manchas grandes
-        mask_white = self._filter_line_shape(mask_white_raw)
+        # Filtrar blanco: solo blobs de tamaño razonable (descarta reflejos y ruido)
+        mask_white = self._filter_by_area(mask_white_raw)
 
+        # ── Centroides en la banda de look-ahead ──────────────────────
         row  = int(self.look_ahead_row * h)
-        band = slice(max(0, row - 8), min(h, row + 8))
+        band = slice(max(0, row - self.band_half_h),
+                     min(h, row + self.band_half_h))
+
         x_yellow = self._centroid_x(mask_yellow[band, :])
         x_white  = self._centroid_x(mask_white[band, :])
 
-        # Validar distancia entre líneas: solo aceptar blanco dentro del umbral de carril
+        # ── Error de posición ─────────────────────────────────────────
         lane_width_px = self.lane_width_m * self.px_per_meter
-        if x_yellow is not None and x_white is not None:
-            dist_px = x_white - x_yellow
-            if dist_px < lane_width_px * 0.6 or dist_px > lane_width_px * 1.3:
-                x_white = None  # blanco fuera del umbral de 22cm → ignorar
+        center_px     = None
 
         if x_yellow is not None and x_white is not None:
+            # Ambas líneas visibles: centro exacto entre las dos
             center_px = (x_yellow + x_white) / 2.0
-        elif x_yellow is not None:
-            center_px = x_yellow + lane_width_px / 2.0
-        elif x_white is not None:
-            center_px = x_white - lane_width_px / 2.0
-        else:
-            center_px = None
+        elif not self.require_both:
+            # Solo una línea: estimar el centro usando el ancho de carril conocido
+            if x_yellow is not None:
+                center_px = x_yellow + lane_width_px / 2.0
+            elif x_white is not None:
+                center_px = x_white  - lane_width_px / 2.0
 
-        error_m = (center_px - w / 2.0) / self.px_per_meter if center_px is not None else float('nan')
+        error_m = ((center_px - w / 2.0) / self.px_per_meter
+                   if center_px is not None else float('nan'))
 
         out      = Float32()
         out.data = float(error_m)
@@ -181,17 +189,14 @@ class LaneDetector(Node):
                                 x_white, x_yellow, center_px, msg)
 
     # ------------------------------------------------------------------
-    def _filter_line_shape(self, mask):
-        """Mantiene contornos con forma de línea (alto/ancho >= min_aspect).
-        Rechaza manchas grandes (reflejos) y pequeñas (ruido)."""
-        result   = np.zeros_like(mask)
-        contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    def _filter_by_area(self, mask):
+        """Conserva contornos cuya área esté entre min_area y white_max_area."""
+        result = np.zeros_like(mask)
+        contours, _ = cv2.findContours(
+            mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         for cnt in contours:
             area = cv2.contourArea(cnt)
-            if area < self.min_area or area > self.white_max_area:
-                continue
-            _, _, cw, ch = cv2.boundingRect(cnt)
-            if ch / (cw + 1e-5) >= self.white_min_aspect:
+            if self.min_area <= area <= self.white_max_area:
                 cv2.drawContours(result, [cnt], -1, 255, -1)
         return result
 
@@ -202,26 +207,45 @@ class LaneDetector(Node):
             return None
         return m['m10'] / m['m00']
 
+    # ------------------------------------------------------------------
     def _publish_debug(self, warp, mask_white, mask_yellow, row,
                        xw, xy, xc, header_msg):
         h, w = warp.shape[:2]
-        dbg = np.zeros((h, w, 3), dtype=np.uint8)
+        dbg = warp.copy()
 
-        dbg[mask_white  > 0] = (255, 255, 255) # blanco   → blanco
-        dbg[mask_yellow > 0] = (0, 255, 255)   # amarillo → cyan (encima del blanco)
+        # Overlay semitransparente de máscaras sobre la imagen warpeada
+        overlay = dbg.copy()
+        overlay[mask_yellow > 0] = (0, 220, 220)   # cyan = amarillo detectado
+        overlay[mask_white  > 0] = (200, 200, 255)  # azul claro = blanco detectado
+        cv2.addWeighted(overlay, 0.5, dbg, 0.5, 0, dbg)
 
+        # Línea de look-ahead y centro de imagen
         cv2.line(dbg, (0, row), (w, row), (0, 255, 0), 1)
-        cv2.line(dbg, (w // 2, 0), (w // 2, h), (128, 128, 128), 1)
+        cv2.line(dbg, (w // 2, 0), (w // 2, h), (180, 180, 180), 1)
 
+        # División izquierda / derecha
+        cv2.line(dbg, (w // 2, 0), (w // 2, h), (100, 100, 100), 1)
+
+        # Puntos de centroide
         for x, color, label in (
-            (xw, (200, 200, 200), 'W'),
-            (xy, (0, 255, 255),   'Y'),
-            (xc, (0, 0, 255),     'C'),
+            (xw, (255, 255, 255), 'W'),   # blanco
+            (xy, (0, 200, 255),   'Y'),   # amarillo
+            (xc, (0, 0, 255),     'C'),   # centro calculado
         ):
             if x is not None:
-                cv2.circle(dbg, (int(x), row), 6, color, -1)
-                cv2.putText(dbg, label, (int(x) + 8, row - 4),
+                cv2.circle(dbg, (int(x), row), 7, color, -1)
+                cv2.putText(dbg, label, (int(x) + 9, row - 5),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
+
+        # Estado de detección en texto
+        detected = []
+        if xy is not None:
+            detected.append('Y')
+        if xw is not None:
+            detected.append('W')
+        status = '+'.join(detected) if detected else 'NONE'
+        cv2.putText(dbg, f'Lines: {status}', (5, 20),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
 
         out        = self.bridge.cv2_to_imgmsg(dbg, 'bgr8')
         out.header = header_msg.header

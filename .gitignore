@@ -1,1 +1,18 @@
 __pycache__/
+*.pyc
+*.pyo
+build/
+install/
+log/
+
+# Archivos no necesarios en el robot
+*.docx
+*.bak*
+.claude/
+capytown_esan/calibrate_beff.py
+capytown_esan/error_odom.py
+capytown_esan/move_square.py
+capytown_esan/run_square_cli.py
+capytown_esan/teleop_key.py
+config/wheel_params.yaml
+launch/bringup.launch.py
