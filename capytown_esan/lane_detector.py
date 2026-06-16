@@ -86,7 +86,7 @@ class LaneDetector(Node):
         self.get_logger().info('lane_detector listo.')
         self.get_logger().info(
             f'yellow HSV [{self.yellow_lo}] - [{self.yellow_hi}]  '
-            f'white LAB [{self.white_lo_lab}] - [{self.white_hi_lab}]')
+            f'white HSV [{self.white_lo_hsv}] - [{self.white_hi_hsv}]')
 
     # ------------------------------------------------------------------
     def build_ipm(self, w, h):
