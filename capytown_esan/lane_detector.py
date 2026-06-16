@@ -29,14 +29,12 @@ class LaneDetector(Node):
         self.bridge = CvBridge()
 
         self.declare_parameters('', [
-            # Blanco - LAB (L=luminosidad, A y B cerca de 128 = neutro/blanco)
-            ('white_l_min',        80),
-            ('white_l_max',        255),
-            ('white_a_min',        85),
-            ('white_a_max',        170),
-            ('white_b_min',        85),
-            ('white_b_max',        170),
-            ('white_max_area',     6000),  # rechaza reflejos grandes
+            # Blanco - HSV (baja saturación + valor medio-alto = gris/blanco)
+            ('white_s_min',        0),
+            ('white_s_max',        80),    # saturación baja = sin color = blanco/gris
+            ('white_v_min',        100),   # valor mínimo para separar del piso oscuro
+            ('white_v_max',        255),
+            ('white_max_area',     25000), # rechaza reflejos muy grandes
             # Amarillo - HSV
             ('yellow_h_min', 15),
             ('yellow_h_max', 40),
@@ -57,12 +55,9 @@ class LaneDetector(Node):
 
         gp = self.get_parameter
 
-        self.white_lo_lab = np.array([gp('white_l_min').value,
-                                       gp('white_a_min').value,
-                                       gp('white_b_min').value], dtype=np.uint8)
-        self.white_hi_lab = np.array([gp('white_l_max').value,
-                                       gp('white_a_max').value,
-                                       gp('white_b_max').value], dtype=np.uint8)
+        # Blanco en HSV: H cualquiera, S baja, V alta
+        self.white_lo_hsv = np.array([0,   gp('white_s_min').value, gp('white_v_min').value], dtype=np.uint8)
+        self.white_hi_hsv = np.array([179, gp('white_s_max').value, gp('white_v_max').value], dtype=np.uint8)
         self.white_max_area = float(gp('white_max_area').value)
 
         self.yellow_lo = np.array([gp('yellow_h_min').value,
@@ -126,10 +121,8 @@ class LaneDetector(Node):
 
         # ── Detección de colores ──────────────────────────────────────
         hsv         = cv2.cvtColor(warp, cv2.COLOR_BGR2HSV)
-        mask_yellow = cv2.inRange(hsv, self.yellow_lo, self.yellow_hi)
-
-        lab            = cv2.cvtColor(warp, cv2.COLOR_BGR2LAB)
-        mask_white_raw = cv2.inRange(lab, self.white_lo_lab, self.white_hi_lab)
+        mask_yellow    = cv2.inRange(hsv, self.yellow_lo,    self.yellow_hi)
+        mask_white_raw = cv2.inRange(hsv, self.white_lo_hsv, self.white_hi_hsv)
 
         # Morfología para eliminar ruido
         kernel = np.ones((3, 3), np.uint8)
