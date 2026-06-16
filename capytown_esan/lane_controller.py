@@ -62,6 +62,7 @@ class LaneController(Node):
         self.last_w       = 0.0
         self.integral     = 0.0
         self.initialized  = False
+        self.has_line     = False
         self.last_stamp   = self.get_clock().now()
         self.last_rx      = self.get_clock().now()
         self.error_history = deque(maxlen=hist)
@@ -78,10 +79,13 @@ class LaneController(Node):
             f'recovery_w={self.recovery_w} rad/s')
 
     def on_error(self, msg):
+        self.last_rx = self.get_clock().now()
         if not math.isnan(msg.data):
             self.error       = msg.data
-            self.last_rx     = self.get_clock().now()
             self.initialized = True
+            self.has_line    = True
+        else:
+            self.has_line = False
 
     def _trend(self):
         """Pendiente media del historial de errores (m por muestra)."""
@@ -106,14 +110,11 @@ class LaneController(Node):
             self.pub.publish(Twist())
             return
 
-        # Línea perdida → recovery: continuar girando en el mismo sentido
-        if age > self.timeout:
+        # Sin líneas detectadas → parar completamente
+        if not self.has_line:
             self.integral = 0.0
             self.error_history.clear()
-            cmd = Twist()
-            cmd.linear.x  = self.recovery_v
-            cmd.angular.z = math.copysign(self.recovery_w, self.last_w) if self.last_w != 0.0 else -self.recovery_w
-            self.pub.publish(cmd)
+            self.pub.publish(Twist())
             return
 
         e = self.error
