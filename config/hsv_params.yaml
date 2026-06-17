@@ -26,15 +26,24 @@ lane_detector:
     # Geometría / IPM
     # ---------------------------------------------------------------
     min_area: 150
-    lane_width_m: 0.22
     px_per_meter: 600.0
     look_ahead_row: 0.88
     band_half_height: 30
 
     # ---------------------------------------------------------------
+    # Navegación — amarillo como referencia principal
+    # yellow_setpoint: fracción del ancho donde debe aparecer el amarillo
+    #   0.25 = 25% desde la izquierda (robot más pegado al amarillo)
+    #   0.35 = 35% desde la izquierda (robot más al centro)
+    # white_weight: cuánto influye el blanco cuando se detectan ambas líneas
+    #   0.0 = ignorar blanco completamente
+    #   0.25 = blanco aporta 25% de corrección
+    # ---------------------------------------------------------------
+    yellow_setpoint: 0.28
+    white_weight: 0.25
+
+    # ---------------------------------------------------------------
     # Comportamiento
-    # require_both_lines: true  → solo publica error si VE AMBAS líneas
-    # require_both_lines: false → si pierde una, estima con la otra
     # ---------------------------------------------------------------
     require_both_lines: false
     publish_debug: true

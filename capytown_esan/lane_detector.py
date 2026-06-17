@@ -44,12 +44,14 @@ class LaneDetector(Node):
             ('yellow_v_max', 255),
             # Geometría
             ('min_area',           150),
-            ('lane_width_m',       0.22),
             ('px_per_meter',       600.0),
             ('look_ahead_row',     0.88),
-            ('band_half_height',   30),    # semialtura de la banda de centroide en px
+            ('band_half_height',   30),
+            # Navegación: amarillo como referencia principal
+            ('yellow_setpoint',    0.28), # fracción del ancho donde debe estar el amarillo (izq)
+            ('white_weight',       0.25), # peso del blanco cuando ambas líneas visibles (0=ignorar blanco)
             # Comportamiento
-            ('require_both_lines', False), # True = solo publica error si ambas líneas detectadas
+            ('require_both_lines', False),
             ('publish_debug',      True),
         ])
 
@@ -67,13 +69,14 @@ class LaneDetector(Node):
                                     gp('yellow_s_max').value,
                                     gp('yellow_v_max').value], dtype=np.uint8)
 
-        self.min_area       = float(gp('min_area').value)
-        self.lane_width_m   = float(gp('lane_width_m').value)
-        self.px_per_meter   = float(gp('px_per_meter').value)
-        self.look_ahead_row = float(gp('look_ahead_row').value)
-        self.band_half_h    = int(gp('band_half_height').value)
-        self.require_both   = bool(gp('require_both_lines').value)
-        self.publish_debug  = bool(gp('publish_debug').value)
+        self.min_area        = float(gp('min_area').value)
+        self.px_per_meter    = float(gp('px_per_meter').value)
+        self.look_ahead_row  = float(gp('look_ahead_row').value)
+        self.band_half_h     = int(gp('band_half_height').value)
+        self.yellow_setpoint = float(gp('yellow_setpoint').value)
+        self.white_weight    = float(gp('white_weight').value)
+        self.require_both    = bool(gp('require_both_lines').value)
+        self.publish_debug   = bool(gp('publish_debug').value)
 
         self.M         = None
         self.warp_size = None
@@ -152,26 +155,31 @@ class LaneDetector(Node):
         x_yellow = self._centroid_x(mask_yellow[band, :])
         x_white  = self._centroid_x(mask_white[band, :])
 
-        # ── Error de posición ─────────────────────────────────────────
-        lane_width_px = self.lane_width_m * self.px_per_meter
-        center_px     = None
+        # ── Error de posición (amarillo = referencia principal) ───────
+        # El robot se posiciona para que el amarillo aparezca en yellow_setpoint
+        # del ancho de imagen. El blanco aporta solo white_weight de corrección.
+        target_y_px = self.yellow_setpoint * w
+        target_w_px = (1.0 - self.yellow_setpoint) * w
+
+        error_px = None
 
         if x_yellow is not None and x_white is not None:
-            # Ambas líneas visibles: centro exacto entre las dos
-            center_px = (x_yellow + x_white) / 2.0
-        elif not self.require_both:
-            # Solo una línea: estimar el centro usando el ancho de carril conocido
-            if x_yellow is not None:
-                center_px = x_yellow + lane_width_px / 2.0
-            elif x_white is not None:
-                center_px = x_white  - lane_width_px / 2.0
+            err_y    = x_yellow - target_y_px
+            err_w    = x_white  - target_w_px
+            error_px = (1.0 - self.white_weight) * err_y + self.white_weight * err_w
+        elif x_yellow is not None:
+            error_px = x_yellow - target_y_px
+        elif x_white is not None and not self.require_both:
+            error_px = x_white - target_w_px
 
-        error_m = ((center_px - w / 2.0) / self.px_per_meter
-                   if center_px is not None else float('nan'))
+        error_m = error_px / self.px_per_meter if error_px is not None else float('nan')
 
         out      = Float32()
         out.data = float(error_m)
         self.pub_err.publish(out)
+
+        # Para debug: posición del centro estimado en píxeles
+        center_px = (w * self.yellow_setpoint + error_px) if error_px is not None else None
 
         if self.publish_debug:
             self._publish_debug(warp, mask_white, mask_yellow, row,
