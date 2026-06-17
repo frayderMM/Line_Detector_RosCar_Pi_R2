@@ -87,10 +87,12 @@ class LaneDetector(Node):
         self.M         = None
         self.warp_size = None
 
-        self.sub     = self.create_subscription(
+        self.sub      = self.create_subscription(
             Image, '/image_raw', self.on_image, 10)
-        self.pub_err = self.create_publisher(Float32, '/lane_error', 10)
-        self.pub_dbg = self.create_publisher(Image, '/lane/debug_image', 10)
+        self.pub_err  = self.create_publisher(Float32, '/lane_error',    10)
+        self.pub_dbg  = self.create_publisher(Image,   '/lane/debug_image', 10)
+        self.pub_yx   = self.create_publisher(Float32, '/lane/yellow_x', 10)
+        self.pub_wx   = self.create_publisher(Float32, '/lane/white_x',  10)
 
         self.get_logger().info('lane_detector listo.')
         self.get_logger().info(
@@ -190,6 +192,11 @@ class LaneDetector(Node):
         out      = Float32()
         out.data = float(error_m)
         self.pub_err.publish(out)
+
+        yx_msg = Float32(); yx_msg.data = float(x_yellow / w) if x_yellow is not None else float('nan')
+        wx_msg = Float32(); wx_msg.data = float(x_white  / w) if x_white  is not None else float('nan')
+        self.pub_yx.publish(yx_msg)
+        self.pub_wx.publish(wx_msg)
 
         # Para debug: posición del centro estimado en píxeles
         center_px = (w / 2.0 + error_px) if error_px is not None else None
