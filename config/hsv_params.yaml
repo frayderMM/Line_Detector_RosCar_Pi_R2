@@ -43,7 +43,7 @@ lane_detector:
     #   0.0 = ignorar blanco completamente
     #   0.25 = blanco aporta 25% de corrección
     # ---------------------------------------------------------------
-    yellow_setpoint: 0.30
+    yellow_setpoint: 0.33
     white_weight: 0.25
 
     # ---------------------------------------------------------------
