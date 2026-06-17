@@ -23,8 +23,9 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'lane_detector = capytown_esan.lane_detector:main',
+            'lane_detector   = capytown_esan.lane_detector:main',
             'lane_controller = capytown_esan.lane_controller:main',
+            'hsv_tuner       = capytown_esan.hsv_tuner:main',
         ],
     },
 )
