@@ -29,19 +29,23 @@ class LaneDetector(Node):
         self.bridge = CvBridge()
 
         self.declare_parameters('', [
-            # Blanco - HSV (baja saturación + valor medio-alto = gris/blanco)
-            ('white_s_min',        0),
-            ('white_s_max',        80),    # saturación baja = sin color = blanco/gris
-            ('white_v_min',        100),   # valor mínimo para separar del piso oscuro
-            ('white_v_max',        255),
-            ('white_max_area',     25000), # rechaza reflejos muy grandes
+            # Blanco - HSV
+            ('white_s_min',           0),
+            ('white_s_max',           65),
+            ('white_v_min',           170),
+            ('white_v_max',           255),
+            ('white_max_area',        25000),
+            ('white_min_area',        1000),
+            ('white_min_elongation',  5.0),
             # Amarillo - HSV
-            ('yellow_h_min', 15),
-            ('yellow_h_max', 40),
-            ('yellow_s_min', 60),
-            ('yellow_s_max', 255),
-            ('yellow_v_min', 80),
-            ('yellow_v_max', 255),
+            ('yellow_h_min',          15),
+            ('yellow_h_max',          45),
+            ('yellow_s_min',          45),
+            ('yellow_s_max',          255),
+            ('yellow_v_min',          80),
+            ('yellow_v_max',          255),
+            ('yellow_min_area',       500),
+            ('yellow_min_elongation', 8.0),
             # Geometría
             ('min_area',           150),
             ('px_per_meter',       600.0),
@@ -58,9 +62,13 @@ class LaneDetector(Node):
         gp = self.get_parameter
 
         # Blanco en HSV: H cualquiera, S baja, V alta
-        self.white_lo_hsv = np.array([0,   gp('white_s_min').value, gp('white_v_min').value], dtype=np.uint8)
-        self.white_hi_hsv = np.array([179, gp('white_s_max').value, gp('white_v_max').value], dtype=np.uint8)
-        self.white_max_area = float(gp('white_max_area').value)
+        self.white_lo_hsv         = np.array([0,   gp('white_s_min').value, gp('white_v_min').value], dtype=np.uint8)
+        self.white_hi_hsv         = np.array([179, gp('white_s_max').value, gp('white_v_max').value], dtype=np.uint8)
+        self.white_max_area       = float(gp('white_max_area').value)
+        self.white_min_area       = float(gp('white_min_area').value)
+        self.white_min_elongation = float(gp('white_min_elongation').value)
+        self.yellow_min_area      = float(gp('yellow_min_area').value)
+        self.yellow_min_elongation= float(gp('yellow_min_elongation').value)
 
         self.yellow_lo = np.array([gp('yellow_h_min').value,
                                     gp('yellow_s_min').value,
@@ -144,8 +152,16 @@ class LaneDetector(Node):
         mask_white_raw = cv2.bitwise_and(mask_white_raw,
                                           cv2.bitwise_not(mask_yellow))
 
-        # Filtrar blanco: solo blobs de tamaño razonable (descarta reflejos y ruido)
-        mask_white = self._filter_by_area(mask_white_raw)
+        # Filtrar por forma: solo cintas alargadas, no reflejos redondos
+        mask_yellow = self._filter_by_shape(
+            mask_yellow,
+            min_area=self.yellow_min_area, max_area=self.white_max_area,
+            min_elongation=self.yellow_min_elongation)
+        mask_white = self._filter_by_shape(
+            mask_white_raw,
+            min_area=self.white_min_area,  max_area=self.white_max_area,
+            min_elongation=self.white_min_elongation,
+            min_cx_ratio=0.45)
 
         # ── Centroides en la banda de look-ahead ──────────────────────
         row  = int(self.look_ahead_row * h)
@@ -186,15 +202,32 @@ class LaneDetector(Node):
                                 x_white, x_yellow, center_px, msg)
 
     # ------------------------------------------------------------------
-    def _filter_by_area(self, mask):
-        """Conserva contornos cuya área esté entre min_area y white_max_area."""
+    def _filter_by_shape(self, mask, min_area, max_area, min_elongation,
+                         min_cx_ratio=0.0, h_total=0, min_cy=0):
+        """Conserva blobs alargados (forma de cinta) usando PCA.
+        Rechaza reflejos puntuales (circulares) y ruido pequeño."""
         result = np.zeros_like(mask)
-        contours, _ = cv2.findContours(
-            mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        for cnt in contours:
-            area = cv2.contourArea(cnt)
-            if self.min_area <= area <= self.white_max_area:
-                cv2.drawContours(result, [cnt], -1, 255, -1)
+        h, w = mask.shape[:2]
+        num, labels, stats, cents = cv2.connectedComponentsWithStats(
+            mask, connectivity=8)
+        for i in range(1, num):
+            area = stats[i, cv2.CC_STAT_AREA]
+            if area < min_area or area > max_area:
+                continue
+            cx, cy = cents[i]
+            if cx < min_cx_ratio * w:
+                continue
+            if cy < min_cy:
+                continue
+            # Elongación por PCA
+            pts = np.column_stack(np.where(labels == i))
+            if len(pts) > 10:
+                xy = pts[:, ::-1].astype(np.float32)
+                _, _, eigval = cv2.PCACompute2(xy, mean=None)
+                elongation = float(eigval[0, 0] / (eigval[1, 0] + 1e-6))
+                if elongation < min_elongation:
+                    continue
+            result[labels == i] = 255
         return result
 
     @staticmethod
