@@ -3,7 +3,7 @@ lane_controller:
 
     # PID — sintonizar en este orden: primero kp, luego kd, al final ki
     kp: 4.0          # proporcional (oscila si es muy alto)
-    ki: 0.3          # integral (corrige sesgo persistente)
+    ki: 0.0          # integral desactivado: evita drift acumulado de curvas
     kd: 0.7          # derivativo (amortigua oscilaciones)
     kff: 1.0         # feed-forward de tendencia (anticipa giros)
 

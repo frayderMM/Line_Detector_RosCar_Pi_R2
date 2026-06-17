@@ -53,7 +53,6 @@ class LaneDetector(Node):
             ('band_half_height',   30),
             # Navegación
             ('yellow_setpoint',    0.33), # fracción del ancho donde debe estar el amarillo (curva)
-            ('center_offset',     -0.05), # offset fracción ancho en modo Y+W: negativo = hacia amarillo
             # Comportamiento
             ('require_both_lines', False),
             ('publish_debug',      True),
@@ -82,7 +81,6 @@ class LaneDetector(Node):
         self.look_ahead_row  = float(gp('look_ahead_row').value)
         self.band_half_h     = int(gp('band_half_height').value)
         self.yellow_setpoint = float(gp('yellow_setpoint').value)
-        self.center_offset   = float(gp('center_offset').value)
         self.require_both    = bool(gp('require_both_lines').value)
         self.publish_debug   = bool(gp('publish_debug').value)
 
@@ -178,8 +176,8 @@ class LaneDetector(Node):
         error_px = None
 
         if x_yellow is not None and x_white is not None:
-            # Recta: centro entre las dos líneas con offset hacia el amarillo
-            error_px = (x_yellow + x_white) / 2.0 - w / 2.0 + self.center_offset * w
+            # Recta: centro exacto entre las dos líneas
+            error_px = (x_yellow + x_white) / 2.0 - w / 2.0
         elif x_yellow is not None:
             # Curva: mantener amarillo en su posición objetivo
             error_px = x_yellow - self.yellow_setpoint * w

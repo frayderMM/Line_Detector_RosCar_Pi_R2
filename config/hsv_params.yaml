@@ -44,8 +44,6 @@ lane_detector:
     #   0.25 = blanco aporta 25% de corrección
     # ---------------------------------------------------------------
     yellow_setpoint: 0.33
-    center_offset: -0.05   # desplaza el centro hacia el amarillo en modo Y+W (negativo = izquierda)
-    white_weight: 0.25
 
     # ---------------------------------------------------------------
     # Comportamiento
