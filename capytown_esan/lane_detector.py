@@ -171,22 +171,21 @@ class LaneDetector(Node):
         x_yellow = self._centroid_x(mask_yellow[band, :])
         x_white  = self._centroid_x(mask_white[band, :])
 
-        # ── Error de posición (amarillo = referencia principal) ───────
-        # El robot se posiciona para que el amarillo aparezca en yellow_setpoint
-        # del ancho de imagen. El blanco aporta solo white_weight de corrección.
-        target_y_px = self.yellow_setpoint * w
-        target_w_px = (1.0 - self.yellow_setpoint) * w
-
+        # ── Error de posición ─────────────────────────────────────────
+        # Modo RECTA  (Y+W visibles): centro exacto entre las dos líneas
+        # Modo CURVA  (solo Y):       amarillo como referencia de setpoint
+        # Modo NINGUNA:               NaN → controller para el robot
         error_px = None
 
         if x_yellow is not None and x_white is not None:
-            err_y    = x_yellow - target_y_px
-            err_w    = x_white  - target_w_px
-            error_px = (1.0 - self.white_weight) * err_y + self.white_weight * err_w
+            # Recta: ancla al centro real del carril
+            error_px = (x_yellow + x_white) / 2.0 - w / 2.0
         elif x_yellow is not None:
-            error_px = x_yellow - target_y_px
+            # Curva: mantener amarillo en su posición objetivo
+            error_px = x_yellow - self.yellow_setpoint * w
         elif x_white is not None and not self.require_both:
-            error_px = x_white - target_w_px
+            # Solo blanco (raro): usar blanco como referencia
+            error_px = x_white - (1.0 - self.yellow_setpoint) * w
 
         error_m = error_px / self.px_per_meter if error_px is not None else float('nan')
 
@@ -195,7 +194,7 @@ class LaneDetector(Node):
         self.pub_err.publish(out)
 
         # Para debug: posición del centro estimado en píxeles
-        center_px = (w * self.yellow_setpoint + error_px) if error_px is not None else None
+        center_px = (w / 2.0 + error_px) if error_px is not None else None
 
         if self.publish_debug:
             self._publish_debug(warp, mask_white, mask_yellow, row,
