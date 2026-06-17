@@ -51,4 +51,4 @@ lane_detector:
     require_both_lines: false
     publish_debug: true
     curves_to_stop: 12    # 3 vueltas x 4 curvas = 12
-    curve_debounce: 8     # frames sin blanco para confirmar curva
+    curve_debounce: 5     # frames sin blanco para confirmar curva
