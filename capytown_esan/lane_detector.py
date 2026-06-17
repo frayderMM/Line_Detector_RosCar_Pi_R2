@@ -56,6 +56,9 @@ class LaneDetector(Node):
             # Comportamiento
             ('require_both_lines', False),
             ('publish_debug',      True),
+            # Control de vueltas: parar tras N curvas (4 curvas = 1 vuelta)
+            ('curves_to_stop',     12),   # 3 vueltas × 4 curvas
+            ('curve_debounce',      8),   # frames consecutivos sin blanco para contar curva
         ])
 
         gp = self.get_parameter
@@ -83,6 +86,14 @@ class LaneDetector(Node):
         self.yellow_setpoint = float(gp('yellow_setpoint').value)
         self.require_both    = bool(gp('require_both_lines').value)
         self.publish_debug   = bool(gp('publish_debug').value)
+        self.curves_to_stop  = int(gp('curves_to_stop').value)
+        self.curve_debounce  = int(gp('curve_debounce').value)
+
+        # Estado para contar curvas
+        self._white_missing_frames = 0   # frames consecutivos sin blanco
+        self._in_curve             = False
+        self._curve_count          = 0
+        self._finished             = False
 
         self.M         = None
         self.warp_size = None
@@ -188,6 +199,28 @@ class LaneDetector(Node):
             error_px = x_white - (1.0 - self.yellow_setpoint) * w
 
         error_m = error_px / self.px_per_meter if error_px is not None else float('nan')
+
+        # ── Contador de curvas ────────────────────────────────────────
+        # Una curva = blanco desaparece durante ≥ curve_debounce frames
+        # Al reaparecer el blanco, se cierra la curva y se incrementa el contador
+        if not self._finished:
+            if x_white is None:
+                self._white_missing_frames += 1
+                if self._white_missing_frames >= self.curve_debounce and not self._in_curve:
+                    self._in_curve = True
+            else:
+                if self._in_curve:
+                    self._curve_count += 1
+                    self.get_logger().info(
+                        f'Curva {self._curve_count}/{self.curves_to_stop} completada')
+                    if self._curve_count >= self.curves_to_stop:
+                        self._finished = True
+                        self.get_logger().info('*** 3 VUELTAS COMPLETAS — deteniendo robot ***')
+                self._in_curve = False
+                self._white_missing_frames = 0
+
+        if self._finished:
+            error_m = float('nan')   # fuerza parada permanente
 
         out      = Float32()
         out.data = float(error_m)
