@@ -17,4 +17,10 @@ lane_controller:
     recovery_w: 1.05     # rad/s = 60 deg/s girando al buscar la línea perdida
     recovery_v: 0.05     # m/s avance lento mientras busca la línea
     history_size: 6      # muestras para calcular tendencia de giro (~0.2s)
-    turn_threshold: 0.3   # |ω| rad/s mínimo para activar FF (giro diferencial real)
+    turn_threshold: 0.3  # |ω| rad/s mínimo para activar FF (giro diferencial real)
+
+    # Conteo de curvas por velocidad angular
+    curves_to_stop:   13   # 3 vueltas × 4 curvas + margen
+    curve_w_on:      1.5   # |ω| rad/s para entrar a curva
+    curve_w_off:     0.5   # |ω| rad/s para salir de curva
+    curve_min_frames:  5   # frames consecutivos para confirmar curva

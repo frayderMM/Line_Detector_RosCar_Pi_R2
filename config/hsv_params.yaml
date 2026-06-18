@@ -50,5 +50,3 @@ lane_detector:
     # ---------------------------------------------------------------
     require_both_lines: false
     publish_debug: true
-    curves_to_stop: 13    # ajustado empiricamente
-    curve_debounce: 5     # frames sin blanco para confirmar curva

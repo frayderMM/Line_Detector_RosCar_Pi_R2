@@ -30,7 +30,7 @@ class LaneController(Node):
             ('kp',             2.5),
             ('ki',             0.0),
             ('kd',             0.3),
-            ('kff',            1.0),   # ganancia feed-forward de tendencia
+            ('kff',            1.0),
             ('linear_speed',   0.20),
             ('max_angular',    2.0),
             ('integral_limit', 0.5),
@@ -38,8 +38,12 @@ class LaneController(Node):
             ('control_rate',   30.0),
             ('recovery_w',     0.6),
             ('recovery_v',     0.0),
-            ('history_size',   10),    # muestras para calcular tendencia (~0.33 s a 30 Hz)
-            ('turn_threshold',  0.3),   # |ω| mínimo para considerar giro diferencial real
+            ('history_size',   10),
+            ('turn_threshold',  0.3),
+            ('curves_to_stop',  13),   # detener tras N curvas
+            ('curve_w_on',      1.5),  # |ω| para entrar a curva
+            ('curve_w_off',     0.5),  # |ω| para salir de curva
+            ('curve_min_frames', 5),   # frames mínimos en curva para confirmar
         ])
 
         gp               = self.get_parameter
@@ -53,9 +57,13 @@ class LaneController(Node):
         self.timeout     = float(gp('error_timeout').value)
         self.recovery_w     = float(gp('recovery_w').value)
         self.recovery_v     = float(gp('recovery_v').value)
-        self.turn_threshold = float(gp('turn_threshold').value)
-        hist                = int(gp('history_size').value)
-        rate                = float(gp('control_rate').value)
+        self.turn_threshold  = float(gp('turn_threshold').value)
+        self.curves_to_stop  = int(gp('curves_to_stop').value)
+        self.curve_w_on      = float(gp('curve_w_on').value)
+        self.curve_w_off     = float(gp('curve_w_off').value)
+        self.curve_min_frames = int(gp('curve_min_frames').value)
+        hist                 = int(gp('history_size').value)
+        rate                 = float(gp('control_rate').value)
 
         self.error        = None
         self.last_error   = 0.0
@@ -66,6 +74,12 @@ class LaneController(Node):
         self.last_stamp   = self.get_clock().now()
         self.last_rx      = self.get_clock().now()
         self.error_history = deque(maxlen=hist)
+
+        # Conteo de curvas por velocidad angular
+        self._in_curve     = False
+        self._curve_frames = 0
+        self._curve_count  = 0
+        self._finished     = False
 
         self.sub   = self.create_subscription(
             Float32, '/lane_error', self.on_error, 10)
@@ -140,6 +154,29 @@ class LaneController(Node):
         # ω total: negado porque error>0 → girar derecha → ω<0
         w = -(P + I + D + FF)
         w = max(-self.max_w, min(self.max_w, w))
+
+        # ── Conteo de curvas por velocidad angular ──────────────────
+        if abs(w) > self.curve_w_on:
+            self._curve_frames += 1
+            if self._curve_frames >= self.curve_min_frames and not self._in_curve:
+                self._in_curve = True
+        else:
+            if abs(w) < self.curve_w_off:
+                self._curve_frames = 0
+            if self._in_curve:
+                self._curve_count += 1
+                self.get_logger().info(
+                    f'Curva {self._curve_count}/{self.curves_to_stop} completada')
+                if self._curve_count >= self.curves_to_stop:
+                    self._finished = True
+                    self.get_logger().info('*** 3 VUELTAS COMPLETAS — deteniendo robot ***')
+            self._in_curve = False
+
+        if self._finished:
+            self.pub.publish(Twist())
+            self.last_error = e
+            self.last_w     = 0.0
+            return
 
         cmd           = Twist()
         cmd.linear.x  = self.v
