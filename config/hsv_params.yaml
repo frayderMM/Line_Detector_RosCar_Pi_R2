@@ -24,7 +24,7 @@ lane_detector:
     yellow_v_min: 80
     yellow_v_max: 255
     yellow_min_area: 500
-    yellow_min_elongation: 8.0  # cintas amarillas son muy alargadas
+    yellow_min_elongation: 4.0  # reducido para no perder amarillo en curvas
 
     # ---------------------------------------------------------------
     # Geometría / IPM
