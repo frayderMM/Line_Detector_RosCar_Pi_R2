@@ -20,7 +20,7 @@ lane_controller:
     turn_threshold: 0.3  # |ω| rad/s mínimo para activar FF (giro diferencial real)
 
     # Conteo de curvas por velocidad angular
-    curves_to_stop:   13   # 3 vueltas × 4 curvas + margen
+    curves_to_stop:   14   # 3 vueltas × 4 curvas + margen
     curve_w_on:      1.5   # |ω| rad/s para entrar a curva
     curve_w_off:     0.5   # |ω| rad/s para salir de curva
     curve_min_frames:  5   # frames consecutivos para confirmar curva
