@@ -2,15 +2,15 @@ lane_controller:
   ros__parameters:
 
     # PID — sintonizar en este orden: primero kp, luego kd, al final ki
-    kp: 6.0          # proporcional (oscila si es muy alto)
+    kp: 5.0          # proporcional (oscila si es muy alto)
     ki: 0.0          # integral desactivado: evita drift acumulado de curvas
-    kd: 1.0          # derivativo (amortigua oscilaciones)
-    kff: 1.5         # feed-forward de tendencia (anticipa giros)
+    kd: 1.2          # derivativo (amortigua oscilaciones)
+    kff: 2.0         # feed-forward de tendencia (anticipa giros)
 
     # Velocidad de crucero
     linear_speed: 0.20   # m/s  (velocidad mínima requerida RC-2)
 
-    max_angular: 3.0     # rad/s — saturación de omega
+    max_angular: 3.5     # rad/s — saturación de omega
     integral_limit: 0.5  # anti-windup: límite acumulador integral
     error_timeout: 0.8   # s — sin /lane_error → modo recuperación
     control_rate: 30.0   # Hz del lazo de control
