@@ -24,14 +24,14 @@ lane_detector:
     yellow_v_min: 80
     yellow_v_max: 255
     yellow_min_area: 500
-    yellow_min_elongation: 8.0  # cintas amarillas son muy alargadas
+    yellow_min_elongation: 4.0  # cintas amarillas en curva se ven menos alargadas
 
     # ---------------------------------------------------------------
     # Geometría / IPM
     # ---------------------------------------------------------------
     min_area: 150
     px_per_meter: 600.0
-    look_ahead_row: 0.65
+    look_ahead_row: 0.72
     band_half_height: 30
 
     # ---------------------------------------------------------------
@@ -50,5 +50,5 @@ lane_detector:
     # ---------------------------------------------------------------
     require_both_lines: false
     publish_debug: true
-    curves_to_stop: 13    # 3 vueltas x 4 curvas + 1 ajuste
+    curves_to_stop: 12    # 3 vueltas x 4 curvas
     curve_debounce: 5     # frames sin blanco para confirmar curva
