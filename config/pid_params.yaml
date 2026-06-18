@@ -5,7 +5,7 @@ lane_controller:
     kp: 5.0          # proporcional (oscila si es muy alto)
     ki: 0.0          # integral desactivado: evita drift acumulado de curvas
     kd: 1.2          # derivativo (amortigua oscilaciones)
-    kff: 2.0         # feed-forward de tendencia (anticipa giros)
+    kff: 2.5         # feed-forward de tendencia (anticipa giros)
 
     # Velocidad de crucero
     linear_speed: 0.20   # m/s  (velocidad mínima requerida RC-2)
