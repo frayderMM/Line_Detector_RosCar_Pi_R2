@@ -24,14 +24,14 @@ lane_detector:
     yellow_v_min: 80
     yellow_v_max: 255
     yellow_min_area: 500
-    yellow_min_elongation: 4.0  # reducido para no perder amarillo en curvas
+    yellow_min_elongation: 8.0  # cintas amarillas son muy alargadas
 
     # ---------------------------------------------------------------
     # Geometría / IPM
     # ---------------------------------------------------------------
     min_area: 150
     px_per_meter: 600.0
-    look_ahead_row: 0.72
+    look_ahead_row: 0.65
     band_half_height: 30
 
     # ---------------------------------------------------------------
@@ -43,7 +43,7 @@ lane_detector:
     #   0.0 = ignorar blanco completamente
     #   0.25 = blanco aporta 25% de corrección
     # ---------------------------------------------------------------
-    yellow_setpoint: 0.36
+    yellow_setpoint: 0.31
 
     # ---------------------------------------------------------------
     # Comportamiento
